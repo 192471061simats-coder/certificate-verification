@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Academic Certificate Verification</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f2f5fa;color:#17233b}
+header{background:#10264d;color:white;padding:28px;text-align:center}
+header h1{margin:0 0 8px;font-size:25px}
+nav{background:#193b70;padding:13px;text-align:center}
+nav button{background:white;color:#193b70;border:0;padding:11px 18px;margin:5px;border-radius:6px;cursor:pointer;font-weight:bold}
+main{max-width:950px;margin:25px auto;padding:0 15px}
+section{display:none;background:white;padding:24px;border-radius:12px;box-shadow:0 3px 14px #ccd4e2;margin-bottom:20px}
+section.active{display:block}
+h2{color:#193b70}
+input{width:100%;padding:12px;margin:7px 0 14px;border:1px solid #bbc7d8;border-radius:6px}
+.action{background:#193b70;color:white;border:0;padding:12px 20px;border-radius:6px;cursor:pointer}
+.result{padding:14px;margin-top:15px;border-radius:6px;font-weight:bold}
+.good{background:#d9f7e5;color:#126b37}
+.bad{background:#ffe0e0;color:#a51f1f}
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{padding:10px;border:1px solid #d6deea;text-align:left;overflow-wrap:anywhere}
+th{background:#e9eff8}
+.small{font-size:13px;color:#64748b}
+</style>
+</head>
+<body>
+<header>
+<h1>Blockchain-Based Academic Certificate Verification</h1>
+<p>Secure • Transparent • Tamper Detection</p>
+</header>
+
+<nav>
+<button onclick="show('admin')">University Admin</button>
+<button onclick="show('verify')">Verify Certificate</button>
+<button onclick="show('ledger');renderLedger()">Blockchain Ledger</button>
+</nav>
+
+<main>
+<section id="admin" class="active">
+<h2>University Administrator</h2>
+<p>Register a new academic certificate.</p>
+<label>Student Name</label>
+<input id="name" placeholder="Enter student name">
+<label>Register Number</label>
+<input id="reg" placeholder="Enter register number">
+<label>Course</label>
+<input id="course" placeholder="Enter course">
+<label>Certificate ID</label>
+<input id="cid" placeholder="Example: SIMATS-2026-001">
+<button class="action" onclick="registerCertificate()">Generate Hash & Register</button>
+<div id="adminResult"></div>
+</section>
+
+<section id="verify">
+<h2>Employer / Certificate Verification</h2>
+<p>Enter the certificate details to check authenticity.</p>
+<label>Student Name</label>
+<input id="vname" placeholder="Student name">
+<label>Register Number</label>
+<input id="vreg" placeholder="Register number">
+<label>Course</label>
+<input id="vcourse" placeholder="Course">
+<label>Certificate ID</label>
+<input id="vcid" placeholder="Certificate ID">
+<button class="action" onclick="verifyCertificate()">Verify Certificate</button>
+<div id="verifyResult"></div>
+</section>
+
+<section id="ledger">
+<h2>Blockchain Ledger</h2>
+<p class="small">Demonstration ledger showing certificate hashes and their status.</p>
+<div id="ledgerContent"></div>
+</section>
+</main>
+
+<script>
+const KEY="academicCertificatesDemo";
+
+function getRecords(){
+ return JSON.parse(localStorage.getItem(KEY)||"[]");
+}
+function saveRecords(records){
+ localStorage.setItem(KEY,JSON.stringify(records));
+}
+async function makeHash(text){
+ const data=new TextEncoder().encode(text);
+ const digest=await crypto.subtle.digest("SHA-256",data);
+ return Array.from(new Uint8Array(digest))
+   .map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+function show(id){
+ document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+}
+async function registerCertificate(){
+ const name=document.getElementById("name").value.trim();
+ const reg=document.getElementById("reg").value.trim();
+ const course=document.getElementById("course").value.trim();
+ const cid=document.getElementById("cid").value.trim();
+ const out=document.getElementById("adminResult");
+
+ if(!name||!reg||!course||!cid){
+  out.innerHTML='<div class="result bad">Please fill in all fields.</div>';
+  return;
+ }
+ const records=getRecords();
+ if(records.some(r=>r.cid===cid)){
+  out.innerHTML='<div class="result bad">Certificate ID already exists.</div>';
+  return;
+ }
+ const details=[name,reg,course,cid].join("|");
+ const hash=await makeHash(details);
+ records.push({name,reg,course,cid,hash,revoked:false});
+ saveRecords(records);
+ out.innerHTML='<div class="result good">Certificate registered successfully!<br>SHA-256 Hash:<br><span class="small">'+hash+'</span></div>';
+ renderLedger();
+}
+async function verifyCertificate(){
+ const name=document.getElementById("vname").value.trim();
+ const reg=document.getElementById("vreg").value.trim();
+ const course=document.getElementById("vcourse").value.trim();
+ const cid=document.getElementById("vcid").value.trim();
+ const out=document.getElementById("verifyResult");
+
+ if(!name||!reg||!course||!cid){
+  out.innerHTML='<div class="result bad">Please fill in all fields.</div>';
+  return;
+ }
+ const record=getRecords().find(r=>r.cid===cid);
+ if(!record){
+  out.innerHTML='<div class="result bad">VERIFICATION FAILED – Certificate ID not found.</div>';
+  return;
+ }
+ if(record.revoked){
+  out.innerHTML='<div class="result bad">VERIFICATION FAILED – This certificate has been revoked.</div>';
+  return;
+ }
+ const enteredHash=await makeHash([name,reg,course,cid].join("|"));
+ if(enteredHash===record.hash){
+  out.innerHTML='<div class="result good">VERIFIED – Certificate is authentic. Hash matches the registered record.</div>';
+ }else{
+  out.innerHTML='<div class="result bad">VERIFICATION FAILED – Certificate details have been modified. Hash does not match.</div>';
+ }
+}
+function revokeCertificate(cid){
+ const records=getRecords();
+ const record=records.find(r=>r.cid===cid);
+ if(record){
+  record.revoked=true;
+  saveRecords(records);
+  renderLedger();
+ }
+}
+function renderLedger(){
+ const records=getRecords();
+ const content=document.getElementById("ledgerContent");
+ if(!records.length){
+  content.innerHTML="<p>No certificates registered yet.</p>";
+  return;
+ }
+ content.innerHTML="<table><tr><th>Certificate ID</th><th>Student</th><th>SHA-256 Hash</th><th>Status</th><th>Action</th></tr>"+
+ records.map(r=>"<tr><td>"+escapeHTML(r.cid)+"</td><td>"+escapeHTML(r.name)+"</td><td class='small'>"+r.hash+"</td><td>"+(r.revoked?"Revoked":"Active")+"</td><td>"+(r.revoked?"—":"<button class='action' onclick='revokeCertificate("+JSON.stringify(r.cid)+")'>Revoke</button>")+"</td></tr>").join("")+
+ "</table>";
+}
+function escapeHTML(value){
+ return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+renderLedger();
+</script>
+</body>
+</html>
